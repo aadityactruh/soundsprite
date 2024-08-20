@@ -45,8 +45,12 @@ class Sketch {
     this.height = this.container.offsetHeight;
 
     this.renderer = new THREE.WebGLRenderer();
+    this.renderer.domElement.width = this.width;
+    this.renderer.domElement.height = this.height;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(this.width, this.height);
+    console.log("canvas dimensions",this.renderer.domElement.width, this.renderer.domElement.height);
+    console.log("renderer dimensions", this.width, this.height);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     this.container.appendChild(this.renderer.domElement);
@@ -142,8 +146,9 @@ class Sketch {
     const mpFaceMesh = window;
 
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      console.log("window dimensions",window.innerWidth, window.innerHeight);
       const deviceConstrains = {
-        video: { width: 1280, height: 720, facingMode: "user" },
+        video: { width: window.innerWidth, height: window.innerHeight, facingMode: "user" },
       };
       navigator.mediaDevices
         .getUserMedia(deviceConstrains)
@@ -430,10 +435,16 @@ class Sketch {
     }
 
     const viewportSize = this.getViewportSizeAtDepth(camera, depth);
+    console.log("viewportSize", viewportSize)
+    // const cameraPlaneGeometry = new THREE.PlaneGeometry(
+    //   viewportSize.width,
+    //   viewportSize.height
+    // );
     const cameraPlaneGeometry = new THREE.PlaneGeometry(
-      viewportSize.width,
-      viewportSize.height
+      600,
+      400
     );
+
     cameraPlaneGeometry.translate(0, 0, depth);
     cameraPlaneGeometry.rotateY(THREE.MathUtils.degToRad(180))
     return new THREE.Mesh(cameraPlaneGeometry, material);
