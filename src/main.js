@@ -19,6 +19,7 @@ document.head.appendChild(fm);
 
 const videoinput = document.getElementById("video_input");
 let vWidth, vHeight;
+const ftime = { s: 0, c: 0 };
 
 // setup threejs scene!
 class Sketch {
@@ -55,7 +56,7 @@ class Sketch {
     this.setupCamera();
     this.setupResize();
 
-    this.time = 0;
+    this.clock = new THREE.Clock();
 
     // warmup calls
     this.resize();
@@ -70,9 +71,9 @@ class Sketch {
 
   setupCamera = () => {
     this.camera = new THREE.PerspectiveCamera(
-      70,
+      35,
       window.innerWidth / window.innerHeight,
-      0.001,
+      0.1,
       1000
     );
 
@@ -123,6 +124,12 @@ class Sketch {
       new THREE.MeshBasicMaterial({ map: inputFrameTexture, side: THREE.DoubleSide })
     );
 
+    /* this.sphere = new THREE.Mesh(
+      new THREE.SphereGeometry(1.17 * 0.5, 32, 32),
+      new THREE.MeshBasicMaterial({color: "blue", side: THREE.DoubleSide})
+    )
+    this.scene.add(this.sphere) */
+
 
     videoinput.addEventListener('loadedmetadata', () => {
       vWidth = videoinput.videoWidth;
@@ -134,6 +141,9 @@ class Sketch {
     // main things!
     fm.onload = function () {
       const promise = scope.loadSceneContent(inputFramesPlane, inputFrameTexture);
+      promise.finally(() => {
+        scope.trackingSequence();
+      })
     };
   };
 
@@ -183,12 +193,11 @@ class Sketch {
     const fmsettings = {
       aspect: videoinput.width / videoinput.height,
       debug: true,
-      filter: true,
+      filter: false,
       initialized: false,
     };
 
     const freq = 120;
-    const ftime = { s: 0, c: 0 };
 
     // setup face tracking mesh
     const faceMeshGeometry = new THREE.BufferGeometry();
@@ -251,6 +260,8 @@ class Sketch {
 		  ftime.c = ftime.s;
     })
 
+    console.log(this.scene.children)
+
     //! UPDATE NEEDS TO BE CHECKED
     /* this.updateViewScaling(plane, texture);
     plane.onBeforeRender = () => {
@@ -259,23 +270,23 @@ class Sketch {
 
   }
 
+  trackingSequence = () => {
+
+  }
+
   createPupilGeometry = (normal, name = "Left", debugMeshes, debug = false) => {
     const xform = new THREE.Group();
-    xform.name = name;
+    xform.name = `iris_${name}`;
 
     const irisMat = new THREE.MeshBasicMaterial({color: "blue", side: THREE.DoubleSide});
 
-     const irisMesh = new THREE.Mesh(
-      new THREE.CircleGeometry(1.17 * 0.5, 32),
+    const irisMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(1.17 * 0.5, 32, 32),
       irisMat
     )
-    // irisMesh.visible = debug;
+    irisMesh.visible = debug;
     irisMesh.parent = xform;
     debugMeshes.dbg_iris = irisMesh;
-
-    /* debugMeshes.dbg_lens = this.drawDebugMesh(normal.multiplyScalar(15), new THREE.Color("magenta"), 2.5, name);
-    debugMeshes.dbg_lens.visible = debug;
-    debugMeshes.dbg_lens.parent = xform; */
 
     this.scene.add(xform)
 
@@ -333,12 +344,14 @@ class Sketch {
         const fz = track.filters[2]
           ? track.filters[2].filter(vpos.z, (1 / 120) * ftime.c)
           : vpos.z;
-
+  
           const transformedVertex = settings.filter ? new THREE.Vector3(fx, fy, fz).applyMatrix4(mesh.matrixWorld) : vpos.applyMatrix4(mesh.matrixWorld);
           track.trkobj.position.copy(transformedVertex);
           track.trkobj.parent && track.trkobj.position.applyMatrix4(track.trkobj.parent.matrixWorld.clone().invert());
-          track.trkobj.quaternion.copy(mRot);
-      }
+          track.trkobj.quaternion.copy(mRot);   
+          
+          // track.trkobj.name === "iris_Left" && this.sphere.position.copy(track.trkobj.position)
+        }
     });
 
     const meshGeo = mesh.geometry;
@@ -365,8 +378,6 @@ class Sketch {
       const r = trackers[1].trkobj.getWorldPosition(new THREE.Vector3()) || new THREE.Vector3(0, 0, 0);
 		  const l = trackers[0].trkobj.getWorldPosition(new THREE.Vector3()) || new THREE.Vector3(0, 0, 0);
       const center = r.add(new THREE.Vector3().subVectors(l, r).multiplyScalar(0.5));
-
-
 
       if(this.camera) {
         this.camera.position.z = center.z + dZ + (1 - this.renderer.domElement.width / results.image.width) * 4;
@@ -441,7 +452,7 @@ class Sketch {
 
   update = () => {
     this.render();
-
+    ftime.c += this.clock.getDelta();
     this.frameId = window.requestAnimationFrame(this.update);
   };
 
