@@ -4,7 +4,7 @@ import "./style.css";
 import * as THREE from "three";
 import { _canonical_face_model } from "./faceModelData";
 import OneEuroFilter from "./OneEuroFilter";
-import { computeNormals } from "./helpers";
+import { computeNormals, getPointsCenter } from "./helpers";
 
 //dependencies for face tracking
 var cu = document.createElement("script");
@@ -19,7 +19,6 @@ document.head.appendChild(fm);
 
 const videoinput = document.getElementById("video_input");
 let vWidth, vHeight;
-const ftime = { s: 0, c: 0 };
 
 // setup threejs scene!
 class Sketch {
@@ -50,13 +49,9 @@ class Sketch {
     this.renderer.setSize(this.width, this.height);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-    // this.container.appendChild(this.renderer.domElement);
-
     //Setup Camera & Resize
     this.setupCamera();
     this.setupResize();
-
-    this.clock = new THREE.Clock();
 
     // warmup calls
     this.resize();
@@ -102,6 +97,8 @@ class Sketch {
   };
 
   stop = () => {
+    this.faceCamera.stop();
+    this.faceMesh.close();
     cancelAnimationFrame(this.frameId);
   };
 
@@ -126,12 +123,6 @@ class Sketch {
         side: THREE.DoubleSide,
       })
     );
-
-    /* this.sphere = new THREE.Mesh(
-      new THREE.SphereGeometry(1.17 * 0.5, 32, 32),
-      new THREE.MeshBasicMaterial({color: "blue", side: THREE.DoubleSide})
-    )
-    this.scene.add(this.sphere) */
 
     videoinput.addEventListener("loadedmetadata", () => {
       vWidth = videoinput.videoWidth;
@@ -201,7 +192,6 @@ class Sketch {
 
     this.faceCamera = new mpCameraUtils.Camera(videoinput, {
       onFrame: async () => {
-        // console.log("ON FRAME");
         await this.faceMesh.send({ image: videoinput });
       },
     });
@@ -209,7 +199,7 @@ class Sketch {
     const fmsettings = {
       aspect: videoinput.width / videoinput.height,
       debug: true,
-      filter: false,
+      filter: true,
       initialized: false,
     };
 
@@ -238,8 +228,6 @@ class Sketch {
 
     const uvs = new Float32Array(_canonical_face_model.face_uvs);
     faceMeshGeometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
-
-    // faceMeshGeometry.computeVertexNormals();
 
     this.threeFaceMesh = new THREE.Mesh(
       faceMeshGeometry,
@@ -292,19 +280,13 @@ class Sketch {
 
     this.faceMesh.onResults((results) => {
       console.log("On Update", window.innerWidth);
-      this.updateMesh(
-        this.threeFaceMesh,
-        results,
-        fmsettings,
-        [pupils.left, pupils.right],
-        ftime
-      );
+      this.updateMesh(this.threeFaceMesh, results, fmsettings, [
+        pupils.left,
+        pupils.right,
+      ]);
     });
 
-    this.faceCamera.start().then(() => {
-      ftime.s = Date.now();
-      ftime.c = ftime.s;
-    });
+    this.faceCamera.start();
 
     console.log(this.scene.children);
 
@@ -339,7 +321,7 @@ class Sketch {
     return xform;
   };
 
-  updateMesh = (mesh, results, settings, trackers = [], ftime) => {
+  updateMesh = (mesh, results, settings, trackers = []) => {
     const geometry = results.multiFaceGeometry[0];
     if (!geometry) return;
 
@@ -376,7 +358,7 @@ class Sketch {
 
       if (track.trkobj) {
         const vpos = Array.isArray(track.faceidx)
-          ? this.get_points_center(
+          ? getPointsCenter(
               track.faceidx.map(
                 (idx) =>
                   new THREE.Vector3(
@@ -393,23 +375,24 @@ class Sketch {
             );
 
         const fx = track.filters[0]
-          ? track.filters[0].filter(vpos.x, (1 / 120) * ftime.c)
+          ? track.filters[0].filter(vpos.x, (1 / 120) * Date.now())
           : vpos.x;
         const fy = track.filters[1]
-          ? track.filters[1].filter(vpos.y, (1 / 120) * ftime.c)
+          ? track.filters[1].filter(vpos.y, (1 / 120) * Date.now())
           : vpos.y;
         const fz = track.filters[2]
-          ? track.filters[2].filter(vpos.z, (1 / 120) * ftime.c)
+          ? track.filters[2].filter(vpos.z, (1 / 120) * Date.now())
           : vpos.z;
 
         const transformedVertex = settings.filter
           ? new THREE.Vector3(fx, fy, fz).applyMatrix4(mesh.matrixWorld)
           : vpos.applyMatrix4(mesh.matrixWorld);
         track.trkobj.position.copy(transformedVertex);
-        // track.trkobj.parent && track.trkobj.position.applyMatrix4(track.trkobj.parent.matrixWorld.clone().invert());
+        track.trkobj.parent &&
+          track.trkobj.position.applyMatrix4(
+            track.trkobj.parent.matrixWorld.clone().invert()
+          );
         track.trkobj.quaternion.copy(mRot);
-
-        // track.trkobj.name === "iris_Left" && this.sphere.position.copy(track.trkobj.position)
       }
     });
 
@@ -491,21 +474,6 @@ class Sketch {
     }
   };
 
-  get_points_center = (points) => {
-    let minx = Math.min(...points.map((pt) => pt.x));
-    let maxx = Math.max(...points.map((pt) => pt.x));
-    let miny = Math.min(...points.map((pt) => pt.y));
-    let maxy = Math.max(...points.map((pt) => pt.y));
-    let minz = Math.min(...points.map((pt) => pt.z));
-    let maxz = Math.max(...points.map((pt) => pt.z));
-
-    return new THREE.Vector3(
-      minx + (maxx - minx) / 2,
-      miny + (maxy - miny) / 2,
-      minz + (maxz - minz) / 2
-    );
-  };
-
   getViewportSizeAtDepth(camera, depth) {
     console.log(
       2 * depth * Math.tan(THREE.MathUtils.degToRad(0.5 * camera.fov)),
@@ -539,7 +507,6 @@ class Sketch {
 
   update = () => {
     this.render();
-    ftime.c += this.clock.getDelta();
     this.frameId = window.requestAnimationFrame(this.update);
   };
 
