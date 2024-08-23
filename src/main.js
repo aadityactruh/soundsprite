@@ -404,7 +404,7 @@ class Sketch {
           : vpos.z;
 
         const transformedVertex = settings.filter
-          ? new THREE.Vector3(fx, fy, fz)
+          ? new THREE.Vector3(fx, fy, fz).applyMatrix4(mesh.matrixWorld)
           : vpos.applyMatrix4(mesh.matrixWorld);
         track.trkobj.position.copy(transformedVertex);
         track.trkobj.parent &&
