@@ -66,13 +66,13 @@ class Sketch {
 
   setupCamera = () => {
     this.camera = new THREE.PerspectiveCamera(
-      35,
+      50,
       window.innerWidth / window.innerHeight,
       0.1,
       1000
     );
 
-    this.camera.position.set(0, 0, 5);
+    this.camera.position.set(0, 0, 20);
   };
 
   setupResize = () => {
@@ -86,7 +86,7 @@ class Sketch {
     this.camera.aspect = this.width / this.height;
     this.camera.updateProjectionMatrix();
 
-    // this.updateViewScaling(this.inputFramesPlane, this.inputFrameTexture);
+    // this.updateViewScaling( this.inputFrameTexture);
 
     this.renderer.setSize(this.width, this.height);
   };
@@ -105,8 +105,6 @@ class Sketch {
   };
 
   addContents = () => {
-
-    console.log("INSIDE addContents");
     const scope = this;
 
     // Set up the basic lighting for the scene
@@ -119,32 +117,19 @@ class Sketch {
     // add video in the background
     this.inputFrameTexture = new THREE.VideoTexture(videoinput);
     this.inputFrameTexture.colorSpace = THREE.SRGBColorSpace;
-    this.inputFrameTexture.wrapS = THREE.RepeatWrapping;
-    this.inputFrameTexture.repeat.x = -1;
+    this.inputFrameTexture.wrapS = this.inputFrameTexture.wrapT = THREE.WrapAroundEnding;
+    this.inputFrameTexture.offset.set(0, 0);
+    this.inputFrameTexture.repeat.set(-1, 1);
 
     this.scene.background = this.inputFrameTexture;
-
-    // const inputFramesDepth = 500
-    /* this.inputFramesPlane = this.createCameraPlaneMesh(
-      this.camera,
-      inputFramesDepth,
-      new THREE.MeshBasicMaterial({
-        map: this.inputFrameTexture,
-        side: THREE.DoubleSide,
-      })
-    ); */
-
-    console.log("VideoTexture created", this.inputFrameTexture, this.inputFramesPlane);
 
     videoinput.addEventListener("loadedmetadata", () => {
       vWidth = videoinput.videoWidth;
       vHeight = videoinput.videoHeight;
     });
-    // this.scene.add(this.inputFramesPlane);
 
     // main things!
     fm.onload = function () {
-      console.log("Facemesh loaded");
       const promise = scope.loadSceneContent();
       /* promise.finally(() => {
         scope.trackingSequence();
@@ -153,7 +138,7 @@ class Sketch {
   };
 
   loadSceneContent = async () => {
-    console.log("INSIDE loadSceneContent");
+    // console.log("INSIDE loadSceneContent");
     const mpCameraUtils = window;
     const mpFaceMesh = window;
 
@@ -174,15 +159,13 @@ class Sketch {
         facingMode: "user",
       },
     };
-    console.log("Device Id", deviceId);
+    // console.log("Device Id", deviceId);
 
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       navigator.mediaDevices
         .getUserMedia(deviceConstrains)
         .then(function (stream) {
           // apply the stream to the video element used in the texture
-          console.log("video stream accquired");
-
           videoinput.srcObject = stream;
           videoinput.play();
         })
@@ -206,8 +189,6 @@ class Sketch {
       minTrackingConfidence: 0.65,
       selfieMode: true,
     });
-
-    console.log("facemesh created", this.faceMesh);
 
     this.faceCamera = new mpCameraUtils.Camera(videoinput, {
       onFrame: async () => {
@@ -255,7 +236,6 @@ class Sketch {
     this.scene.add(this.threeFaceMesh);
 
     console.log("TRACKING MESH CREATED", this.threeFaceMesh);
-    
 
     // pupils
     this.debugMeshes = {
@@ -301,7 +281,7 @@ class Sketch {
     };
 
     this.faceMesh.onResults((results) => {
-      console.log("On Update", window.innerWidth);
+      // console.log("On Update", this.camera.aspect);
       this.updateMesh(this.threeFaceMesh, results, fmsettings, [
         pupils.left,
         pupils.right,
@@ -310,10 +290,8 @@ class Sketch {
 
     this.faceCamera.start();
 
-    console.log("SCENE CONTENT", this.scene.children);
-
     //! UPDATE NEEDS TO BE CHECKED
-    // this.updateViewScaling(this.inputFramesPlane, this.inputFrameTexture);
+    // this.updateViewScaling( this.inputFrameTexture);
   };
 
   // trackingSequence = () => {};
@@ -354,6 +332,7 @@ class Sketch {
     const gverts = geometry.getMesh().getVertexBufferList();
     const pmdata = geometry.getPoseTransformMatrix().getPackedDataList();
     const matrix = new THREE.Matrix4().fromArray(pmdata);
+    // const matrix = mesh.matrixWorld.clone();
 
     let uv_idx = 0;
     let vert_idx = 0;
@@ -363,12 +342,16 @@ class Sketch {
       const gz = gverts[i * 5 + 2];
       const gvec = new THREE.Vector3(gx, gy, gz).applyMatrix4(matrix);
 
-      verts[vert_idx++] = gvec.x;
-      verts[vert_idx++] = gvec.y;
-      verts[vert_idx++] = gvec.z;
+      verts[vert_idx + 0] = gvec.x * this.camera.aspect;
+      verts[vert_idx + 1] = gvec.y;
+      verts[vert_idx + 2] = gvec.z;
 
-      uvs[uv_idx++] = gverts[i * 5 + 3];
-      uvs[uv_idx++] = gverts[i * 5 + 4];
+      vert_idx += 3;
+
+      uvs[uv_idx] = gverts[i * 5 + 3];
+      uvs[uv_idx] = gverts[i * 5 + 4];
+
+      uv_idx += 2;
     }
 
     //update tracking
@@ -422,6 +405,7 @@ class Sketch {
     const positionAttribute = meshGeo.getAttribute("position");
     positionAttribute.array.set(verts);
     positionAttribute.needsUpdate = true;
+    mesh.updateWorldMatrix();
 
     if (settings.initialized === false) {
       const avg_iris = 11.7;
@@ -465,7 +449,7 @@ class Sketch {
     }
   };
 
-  updateViewScaling = (plane, vTexture) => {
+  updateViewScaling = (vTexture) => {
     const canvas = this.renderer.domElement;
     const cAspectRatio = canvas.width / canvas.height;
     const vAspectRatio = vWidth / vHeight;
@@ -477,43 +461,16 @@ class Sketch {
     if (cAspectRatio > vAspectRatio) {
       const scaleY = cAspectRatio / vAspectRatio;
 
-      plane.scale.x = 1;
-      plane.scale.y = scaleY;
-
       vTexture.repeat.set(-1, 1 / scaleY);
       vTexture.offset.set(0, (1 - vTexture.offset.y) * 0.5);
+      vTexture.needsUpdate = true;
     } else {
       const scaleX = vAspectRatio / cAspectRatio;
 
-      plane.scale.x = scaleX;
-      plane.scale.y = 1;
-
       vTexture.repeat.set(-(1 / scaleX), 1);
       vTexture.offset.set((1 - vTexture.offset.x) * 0.5, 0);
+      vTexture.needsUpdate = true;
     }
-  };
-
-  getViewportSizeAtDepth(camera, depth) {
-    const viewportHeightAtDepth =
-      2 * depth * Math.tan(THREE.MathUtils.degToRad(0.5 * camera.fov));
-    const viewportWidthAtDepth = viewportHeightAtDepth * camera.aspect;
-    return new THREE.Vector2(viewportWidthAtDepth, viewportHeightAtDepth);
-  }
-
-  createCameraPlaneMesh = (camera, depth, material) => {
-    if (camera.near > depth || depth > camera.far) {
-      console.warn(
-        "Camera plane geometry will be clipped by the plane `Camera`!"
-      );
-    }
-
-    const viewportSize = this.getViewportSizeAtDepth(camera, depth);
-    const cameraPlaneGeometry = new THREE.PlaneGeometry(viewportSize.width, viewportSize.height, 1);
-    const cameraPlaneMesh = new THREE.Mesh(cameraPlaneGeometry, material);
-    cameraPlaneMesh.position.set(0, 0, -depth);
-    // cameraPlaneMesh.scale.set(viewportSize.width, viewportSize.height, 1);
-    // cameraPlaneMesh.scale.set(640, 480, 1);
-    return cameraPlaneMesh;
   };
 
   update = () => {
