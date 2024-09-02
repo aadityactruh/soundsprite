@@ -117,7 +117,8 @@ class Sketch {
     // add video in the background
     this.inputFrameTexture = new THREE.VideoTexture(videoinput);
     this.inputFrameTexture.colorSpace = THREE.SRGBColorSpace;
-    this.inputFrameTexture.wrapS = this.inputFrameTexture.wrapT = THREE.WrapAroundEnding;
+    this.inputFrameTexture.wrapS = this.inputFrameTexture.wrapT =
+      THREE.WrapAroundEnding;
     this.inputFrameTexture.offset.set(0, 0);
     this.inputFrameTexture.repeat.set(-1, 1);
 
@@ -162,7 +163,20 @@ class Sketch {
     // console.log("Device Id", deviceId);
 
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(
+          deviceConstrains
+        );
+        if (stream) {
+          videoinput.srcObject = stream;
+          videoinput.play();
+        } else {
+          console.log("failed ot acquire stream!");
+        }
+      } catch (e) {
+        console.error("Unable to access the camera/webcam.", e);
+      }
+      /* const stream = await navigator.mediaDevices
         .getUserMedia(deviceConstrains)
         .then(function (stream) {
           // apply the stream to the video element used in the texture
@@ -171,7 +185,7 @@ class Sketch {
         })
         .catch(function (error) {
           console.error("Unable to access the camera/webcam.", error);
-        });
+        }); */
     } else {
       console.log("media devices input not available!");
     }
